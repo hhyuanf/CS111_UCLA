@@ -1,0 +1,32 @@
+Name: Jingyuan Fan
+UCLA ID: 904186250
+
+
+-------------------------------------------------------------------------------
+
+Response to Exercise 1:
+Yes. Since the PID of the current process is first stored in register eax by the interrupt handler, then call run(), and what sys_getid() would return is loaded from the eax register. So no matter run() or schedule() function runs, it would not affect the returned value. 
+
+Response to Exercise 2:
+Please see the corresponding code in mpos-kern.c.
+
+Response to Exercise 3:
+Please see the corresponding code in mpos-kern.c and mpos-kern.h. I added a new fueld to the process descriptor p_waiting which indicates the PID of the process which other processes are waiting on. It’s working like a waiting list, but the limit is that the length of the list is 1, which means that no two processes can wait on one process at the same time.
+
+Response to Exercise 4:
+Set EXTRA_CREDIT_EXERCISE_7 to 0 in mpos-app2.c. When a process A is zombie, the process B which is waiting for process A will be changed to runnable and the state of process A will be changed to empty. Here I set p in the for loop start from 1 rather than 2.
+
+
+
+Anything else you'd like us to know:
+
+
+
+Extra credit exercises 5:
+Set EXTRA_CREDIT_EXERCISE_5 to 1 in mpos-app.c, you can get the result for this exercise. I added a volatile pointer which points to parent both before and after fork.
+
+Extra credit exercises 6:
+Set EXTRA_CREDIT_EXERCISE_6 to 1 in mpos-app.c, you can get the result for this exercise. I added sys_newthread in mpos-app.h just follow sys_wait. I also implemented INT_SYS_NEWTHREAD in mpos-kern.c where it first finds a empty stack and copy all parent’s registers to its own. Then set the stack status register to the start_function whose address is stored in the eax register of the parent, and set its state to runnable and the waiting list to -1 which means no thread is waiting for it.
+
+Extra credit exercises 7:
+Set EXTRA_CREDIT_EXERCISE_7 to 1 in mpos-app2.c. First check if p is valid; if yes, we set its state to P_EMPTY, then set the process which is waiting for the pth process to P_RUNNABLE, and the waiting list of pth process to -1 which means no process is waiting for it
