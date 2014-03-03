@@ -1,0 +1,51 @@
+Name:Jingyuan Fan
+UCLA ID:904186250
+
+
+-------------------------------------------------------------------------------
+
+Response to Exercise 1:
+
+The name of the scheduling algorithm is:
+Round Rodin
+
+
+(Exercise 2 is a coding exercise)
+
+
+Response to Exercise 3:
+
+Average turnaround time for scheduling_algorithm 0:
+(320*4-3+320*4-2+320*4-1+320*4)/4 = 1278.5 ms
+Average turnaround time for scheduling_algorithm 1:
+(320*4+320*3+320*2+320)/4 = 800 ms
+
+Average wait time for scheduling_algorithm 0:
+(0+1+2+3)/4 = 1.5 ms
+Average wait time for scheduling_algorithm 1:
+(0+320+320*2+320*3)/4 = 480 ms
+
+Exercise 4:
+
+Did you complete Exercise 4A or Exercise 4B?
+Both of them
+4A: Need to change PRIORITY in schedos-kern.h and also USER_PRIORITY in corresponding process file for alternating bewteen two processes if the two processes have the same priority level
+4B: 
+
+Exercise 5:
+It should be the fourth process. From the picture, we can see that after successfully executing 4 rounds, the fourth process got interrupted, and that's why it didn't print out 4 on the screen
+
+(Exercise 6 is a coding exercise)
+
+
+Anything else you'd like us to know:
+Set SYN in schedos-kern.h to choose from unsynchronized(1) and synchronized methods(2 and 3) for compare-and-swap and atomic_print respectively.
+
+
+Exercise 7:
+I implemented lottery scheduling. Process assinged with one ticket each is chosen to run with random ticket selected by scheduler.
+
+Exercise 8:
+I implemented atomic_print.
+
+
