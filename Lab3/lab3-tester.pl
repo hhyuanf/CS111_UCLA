@@ -90,7 +90,21 @@ close FOO;
     [ 'echo truncernated11 > test/yes.txt | ls -l test/yes.txt | awk \'{ print $5 }\' ; rm test/yes.txt',
       '15'
     ],
-
+	
+    # symlink 1
+    [ 'ln -s hello.txt test/thelink; diff test/hello.txt test/thelink && echo Same contents',
+      'Same contents'
+    ],
+ 
+    # symlink 2
+    [ 'echo "World" >> test/hello.txt; diff test/hello.txt test/thelink && echo Same contents; rm test/thelink',
+      'Same contents'
+    ],
+ 
+    # conditional symlink 1
+    [ 'cd test; echo "Not root" > notroot; echo "Root" > root; ln -s root?root:notroot amiroot; cat ./amiroot',
+      'Root'
+    ],
 );
 
 my($ntest) = 0;
