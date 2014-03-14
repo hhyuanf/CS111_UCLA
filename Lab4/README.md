@@ -1,238 +1,157 @@
-Lab 3
+Lab 4
 ==========
+
+Handin Procedure
+
+When you are finished, edit the answers.txt file and add your name(s) and email address(es), student ID(s), any challenge problems you may have done.
+
+ALSO REMEMBER TO WRITE THE INFORMATION REQUIRED BY TASKS 2 AND 3, INCLUDING WHICH ROBUSTNESS PROBLEMS YOU FIXED, AND HOW YOU MADE YOUR PEER EVIL!
+
+Also include any other information you'd like us to have. Then run make tarball, which will generate a file lab4-yourusername.tar.gz inside the lab4 directory. Upload this file to CourseWeb using a web browser to turn in the project.
 
 Overview
 
-In Lab 2, we used a RAM disk block device to teach you about the Linux kernel setting and about synchronization. In Lab 3, you'll learn about file systems by writing your own file system driver for Linux.
+This lab concerns distributed computing and security via defensive programming.
+
+Distributed computing uses operating system interfaces to build complex systems from many interacting computers. Your Lab 4 code participates in a peer-to-peer (P2P) network, formed by connecting nodes that can perform both the roles of clients and servers. You're probably familiar with peer-to-peer networks used for downloading files, such as BitTorrent; we have designed a peer-to-peer system somewhat like BitTorrent, from which you can download some lolcats.
 
-Operating systems generally support many different file systems, from old-school FAT (common in DOS machines) to new formats such as Linux's ext3. Each file system type is written to fit a common interface, called the VFS layer. (File systems are often implemented using object oriented techniques.) You will see how a real VFS layer works by filling out a simple file system implementation. You will load that file system module into the kernel and mount the file system, allowing you to access your file system with usual Unix commands like cat, dd, emacs, and even firefox. The file system driver stores its data in a built-in RAM disk, kind of like your RAM disk from Lab 2.
+Our peer-to-peer network consists of two kinds of nodes: trackers and peers. Trackers keep track of which peers are connected to the network; peers actually download files from each other. We have written a tracker and a functional peer. When you download lab4.tar.gz, our peer code is in osppeer.c. We also have five trackers running on our own server. They are:
 
-Like Lab 2, we expect you'll do this lab on Qemu using the ./run-qemu script on your machine, or in the Linux lab. Alternatively, you can also use a Linux machine, such as the Linux lab machines.
+131.179.80.139:11111 -- the normal tracker. Students' peers can connect to this tracker and serve files to each other. This tracker is "seeded" with a mixture of good and slow peers running on our servers.
+131.179.80.139:11112 -- the good tracker. Our own peers are connected to this tracker.
+131.179.80.139:11113 -- the slow tracker. Slow peers, which serve files slowly, are running on this tracker. You can use this tracker to verify that your peer downloads files in parallel.
+131.179.80.139:11114 -- the bad tracker. Bad peers, which attack other peers that attempt to connect, are running on this tracker.
+131.179.80.139:11115 -- the popular tracker. Our own peers are connected to this tracker, plus a bunch of fake peers, making the tracker look very popular.
+Peer-to-peer communication in the OSP2P system is built from a series of remote procedure calls (RPCs). These RPCs are formatted as normal text, formatted somewhat like other Internet protocols (HTTP, FTP, SMTP, and so forth). So you can use the telnet program to try out the RPCs yourself!
 
-Lab materials
+The OSP2P Protocol
 
-The skeleton code you will get for this lab consists of the following files:
+A peer logs in to a tracker as follows.
 
-ospfs.h	 Commented header file defining file system structures and constants.
-ospfsmod.c	 The file system module's source code. All exercises in the lab involve changing this code.
-answers.txt	 Fill this out before submitting.
-base/	 The contents of this directory are copied into your file system's initial RAM disk. You can change the contents of base/, then type make clean; make, to add files to or remove files from your RAM disk.
-./run-qemu	 This script starts up Qemu to run Lab 3.
-./run-direct	 This script runs Lab 3, and is intended for use on a Linux machine.
-test/	 The ./run-qemu script changes test/ into a view of your ospfs file system.
-Makefile	
-ospfsformat.c	 Utility: Creates a RAM disk image from the base/ directory.
-md5.c, md5.h	 Utility for ospfsformat.
-fsimgtoc.c	 Utility: Links the disk image into your module.
-truncate.c	 Utility: Truncates a file to a specified length.
-When you unpack lab3.tar.gz (with the command tar xvzf lab3.tar.gz) you will get a directory lab3 which contains these files. Do your work in this directory.
+The peer connects to the tracker machine.
+The tracker responds with a greeting message.
+The peer registers its IP address and port with an "ADDR" RPC.
+The tracker responds with a message indicating success or failure. Now the tracker will report this peer to other peers who want to download files.
+Here's a picture of this protocol.
 
-Handin procedure
+OSP2P Connection Protocol
 
-When you are finished, edit the answers.txt file and follow the instructions to fill in your name(s), student ID(s), email address(es), short descriptions of any challenge problems you did, and any other information you'd like us to have. Then run "make tarball" which will generate a file lab3-yourusername.tar.gz inside the lab3 directory. Upload this file to CourseWeb using a web browser to turn in the project. (Please do not upload .zip files!)
+The peer then informs the tracker of the files it is willing to upload to others.
 
-Background information
+The peer registers each file with a "HAVE filename" RPC.
+The tracker responds with a message indicating success or failure.
+When a peer wants to download a file from the network, it communicates with both the tracker and other peers.
 
-File system preliminaries
+The downloading peer asks the tracker which peers have the file with a "WANT filename" RPC.
+The tracker responds with a message listing the available peers willing to serve that file.
+The downloading peer picks an available peer from this set, and connects to that peer, sending it a "GET filename OSP2P" RPC.
+The uploading peer responds to this RPC by sending the entire file.
+OSP2P Download Protocol
 
-The file system you will work with, OSPFS, is simpler than most "real" file systems, but it is powerful enough to read and write files organized in a hierarchical directory structure. OSPFS currently does not support timestamps, permissions, or special device files like most UNIX file systems do. Additionally, your module is only capable of using an in-memory file system, meaning that the data "on disk" is actually stored entirely in main memory. This means that changes made to the file system are not saved across reboots (or across module loads and unloads).
+Once the downloading peer has downloaded the entire file, it informs the tracker that it, too, has the file.
 
-File system structure
+The downloading peer registers its newly downloaded file with a "HAVE filename" RPC.
+The tracker responds with a message indicating success or failure.
+What You Must Do
 
-Most UNIX file systems divide available disk space into two main types of regions: inode regions and data regions. UNIX file systems assign one inode to each file in the file system; a file's inode holds critical metadata about the file such as its attributes and pointers to its data blocks. The data regions are divided into large data blocks (typically 4KB or more), within which the file system stores file data and directory metadata. Directory entries contain file names and pointers to inodes; a file is said to be hard-linked if multiple directory entries in the file system refer to that file's inode. OSPFS is designed in much the same way.
+At a high level, there are three parts to this lab.
 
-Both files and directories logically consist of a series of data blocks, which may be scattered throughout the disk much like the pages of a process's virtual address space can be scattered throughout physical memory.
+The peer code that we hand out is sequential: it downloads from peers, and uploads to peers, one at a time. Since the network to any one peer is likely a bottleneck, sequential downloading has poor utilization. You are to make the peer behave in parallel: it should be able to download from peers, and upload to peers, more than one at a time.
+The peer code that we hand out is not robust: communicating with an evil peer can cause your peer code to crash or hang forever. You are to fix the peer code to make it robust. This requires defensive programming.
+The peer code that we hand out is good, i.e., not evil. You are to make your peer code optionally evil: if you start the peer with the -b option (b is for "bad"), it will try to confuse or crash any peers that attempt to download files from it.
+Lab 4 does not have explicitly marked exercises; you have more freedom to change the code however you think is necessary.
 
-Sectors and blocks
+Investigating the OSP2P Protocol
 
-Modern disks perform reads and writes in units of sectors, which today are almost universally 512 bytes each. File systems actually allocate and use disk storage in units of blocks. Be wary of the distinction between the two terms: sector size is a property of the disk hardware, whereas block size is an aspect of the operating system using the disk. A file system's block size must be at least the sector size of the underlying disk, but could be greater (often it is a power of two multiple of the sector size).
+We recommend that you first play around with the OSP2P protocol by running our peer, and by using the telnet program to talk directly to our trackers and peers.
 
-The original UNIX file system used a block size of 512 bytes, the same as the sector size of the underlying disk. Most modern file systems use a larger block size, however, because storage space has gotten much cheaper and it is more efficient to manage storage at larger granularities. Our file system will use a block size of 1024 bytes.
+First, run make run-good. This will build our peer, start it and connect to the good tracker, and download three files into the test/ directory, cat1.jpg, cat2.jpg, and cat3.jpg. Here's what we see.
 
- An OSPFS file system with N blocks and M inodes. 
++ ./osppeer -dtest -t11112 cat1.jpg cat2.jpg cat3.jpg
+* Tracker's greeting:
+200-Welcome to the OSP2P tracker!
+200-You will be timed out after 600 seconds of inactivity.
+200 Try 'HELP' to get a list of commands.
+* Listening on port 11112
+* Tracker's response to our IP address registration:
+220-This tracker is set up to ignore external peers,
+220-so that you don't have to worry about problems caused by other students.
+220 The address registration has been ignored.
+* Registering our files with tracker
+* Finding peers for 'cat1.jpg'
+* Connecting to 131.179.80.160:11114 to download 'cat1.jpg'
+* Saving result to 'cat1.jpg'
+* Downloaded 'cat1.jpg' was 44400 bytes long
+* Finding peers for 'cat2.jpg'
+* Connecting to 131.179.80.160:11114 to download 'cat2.jpg'
+* Saving result to 'cat2.jpg'
+* Downloaded 'cat2.jpg' was 41259 bytes long
+* Finding peers for 'cat3.jpg'
+* Connecting to 131.179.80.31:11114 to download 'cat3.jpg'
+* Saving result to 'cat3.jpg'
+* Downloaded 'cat3.jpg' was 34812 bytes long
+osppeer will then pause, waiting for other peers to upload files from it. If you wait long enough, you will see some additional messages, like this:
 
-Superblocks
+* Got connection from 131.179.80.31:33916
+* Transferring file cat3.jpg
+* Upload of cat3.jpg complete
+* Got connection from 131.179.80.31:33917
+* Odd request CHECKUPLOAD cat3.jpg successful!
+The "good" tracker has a special additional feature, where our peers connect back to your peer and attempt to download files from it. If the download succeeds, and the file contents match the expected values, our peers inform you by connecting with a message like "CHECKUPLOAD cat3.jpg successful!". If there is a problem, you will see a message like "CHECKUPLOAD cat3.jpg FAILED: empty file", or something else. This only works on the good tracker.
 
-File systems typically reserve certain disk blocks, at "easy-to-find" locations on the disk (such as the very start or the very end), to hold meta-data describing properties of the file system as a whole: the block size, disk size, any meta-data required to find the root directory, the time the file system was last mounted, the time the file system was last checked for errors, and so on. These special blocks are called superblocks.
+Press Control-C to quit osppeer. To run against different trackers, try make run (normal tracker), make run-slow, and make run-bad.
 
-Our file system will have exactly one superblock, which will always be at block 1 on the disk. Its layout is defined by struct ospfs_super in ospfs.h. Block 0 is typically reserved to hold boot loaders and partition tables, so file systems generally never use the very first disk block. Most "real" file systems maintain multiple superblocks, replicated throughout several widely-spaced regions of the disk, so that if one of them is corrupted or the disk develops a media error in that region, the other superblocks can still be found and used to access the file system. OSPFS omits this feature for simplicity.
+You can also run ./osppeer yourself from the command line. Here's what its arguments mean.
 
-The block bitmap: managing free disk blocks
+-dtest : Run in the test directory. The peer will register all files located in the test directory with the tracker, and download files into the test directory. You should generally run with the -dtest argument.
+-t11112 : The -t argument specifies the tracker IP address and/or port. You will generally just specify ports; 11111 is the normal tracker, 11112 is the good tracker, 11113 is the slow tracker, and 11114 is the evil tracker. The default tracker IP address is 131.179.80.139.
+cat1.jpg cat2.jpg cat3.jpg : These are the names of files that ./osppeer should try to download. If you give no filename arguments, ./osppeer will not download any files.
+If you run make run-slow, you will see what we mean by "slow peers". And if you run make run-bad, our peers will do their worst to your peer, attempting to crash it or monopolize its resources.
 
-Just as a kernel must manage the system's physical memory to ensure that each physical page is used for only one purpose at a time, a file system must manage the blocks of storage on a disk to ensure that each block is used for only one purpose at a time. In file systems it is common to keep track of free disk blocks using a bitmap rather than a linked list, because a bitmap is more storage-efficient than a linked list and easier to keep consistent on the disk. ("FAT" file systems use a linked list.) Searching for a free block in a bitmap can take more CPU time than simply removing the first element of a linked list, but for file systems this isn't a problem because the I/O cost of actually accessing the free block after we find it dominates performance.
+Now, try connecting to the tracker and to a peer yourself with the telnet program. All the OSP2P RPCs use a text-based format which you can type yourself. Run "telnet read.cs.ucla.edu 11111" to connect to a tracker. Type HELP, then play around with some of the other commands. Type QUIT to quit the connection. Run "telnet read.cs.ucla.edu 11116" to connect to one of our (normal) peers. Type "GET about.txt OSP2P" to request a file. The peer should shut down the connection automatically after sending the file.
 
-To set up a free block bitmap, we reserve a contiguous region of space on the disk large enough to hold one bit for each disk block. For example, since our file system uses 1024-byte blocks, each bitmap block contains 1024*8 = 8192 bits, or enough bits to describe 8192 disk blocks. In other words, for every 8192 disk blocks the file system uses, we must reserve one disk block for the block bitmap. A given bit in the bitmap is set (value 1) if the corresponding block is free, and clear (value 0) if the corresponding block is in use. The block bitmap in our file system always starts at disk block 2, immediately after the superblock. We'll reserve enough bitmap blocks to hold one bit for each block in the entire disk, including the blocks containing the boot sector, the superblock, and the bitmap itself. We will simply make sure that the bitmap bits corresponding to these special, "reserved" areas of the disk are always clear (marked in-use).
+Task 1: Parallel Uploads and Downloads
 
- An OSPFS inode with associated directory entry and data blocks, including indirect blocks. 
+The skeleton code that we hand out is a fully functioning OSP2P peer client, but all of its actions are performed serially. In particular, if multiple desired files are given on the command line, they are processed one at a time. Only after the client successfully downloads the first file (or fails for all peers sharing the file) does it attempt to download the second. Similarly, once the client begins accepting connections from peers, it processes them one at a time.
 
-Inodes
+Your first task is to change the code so that it can process multiple downloads in parallel and multiple uploads in parallel. This is a fairly open-ended problem. You may choose to implement the concurrency by forking processes (like your shell in lab 1), or by using threads. You can also implement parallel downloads and uploads using non-blocking I/O and an event-driven style. Event-driven programming is the most challenging programming style for this lab, but frequently event-driven programs both run faster and use fewer resources than other programming styles. If you are a real performance junkie try events. (We have a description of event-driven programming here. You might also want to try using an event-driven programming library, such as libevent or Tamer.)
 
-Each file and directory on the system corresponds to exactly one inode. The inode stores metadata information about the file, such as its size, its type (file or directory), and the locations of its data blocks. Directory information, such as the file's name and directory location, is not stored in the inode; instead, directory entries refer to inodes by number. This allows the file system to safely move files from one directory to another, and also allows for "hard links". Not all file systems have inodes, but OSPFS does.
+Your client may process downloads in parallel with uploads, or it may processes downloads in parallel and then, once all downloads are done, processes uploads in parallel. Either approach is acceptable.
 
-The layout of OSPFS's inodes is described by struct ospfs_inode in ospfs.h. The oi_direct array in struct ospfs_inode contains space to store the block numbers of the first 10 (OSPFS_NDIRECT) blocks of the file, which we call the file's direct blocks. For small files up to 10*1024 = 10KB in size, this means that the block numbers of all of the file's blocks will fit directly within the ospfs_inode structure itself. For larger files, however, we need a place to hold the rest of the file's block numbers. For any file greater than 10KB in size, therefore, we allocate an additional disk block, called the file's indirect block, to hold up to 1024/4 = 256 additional block numbers. The 10th block number is the 0th slot in the indirect block. This allows files to be up to 266 blocks, or a bit more than 256KB, in size. For files larger than this, the OSPFS file system supports doubly-indirect blocks as well. A doubly-indirect block points to indirect blocks, each of which points to 256 direct blocks. This allows files to be up to 10+256+256*256 = 65802 blocks. To support larger files, "real" file systems may support triply-indirect blocks as well. See the picture at right.
+No matter which approach you choose, you must ensure that your code does not spin (busy-wait -- wait with poor utilization). In particular, when your client is not downloading or uploading, it should be using very little CPU time. Even when it is uploading or downloading multiple files at once, it should not take 90-100% of the CPU. You can use the top program to see how much CPU time is being used by osppeer.
 
-Inodes are relatively small structures; OSPFS's take up 64 bytes each. They are generally stored in a contiguous table on disk. The size of this table is specified when the file system is created, and in most file systems it cannot later be changed. Just like blocks, an inode can be either in use or free, and just like blocks, a file system can run out of inodes. It is actually possible to run out of inodes before running out of blocks, and in this case no more files can be created even though there is space available to store them. For this reason, and because inodes themselves do not take up much space, the inode table is often created with far more available inodes than the file system is expected to need. (Remember, each file uses an inode, so the maximum number of files and directories the file system can store at once equals the number of inodes.)
+Task 2: Security and Defensive Programming
 
-In OSPFS, the inode table is allocated immediately after the free block bitmap, and its blocks are also marked as in use in the free block bitmap. The number of inodes is stored in the superblock, and for convenience the block number of the first block of the inode table is also stored in the superblock. (Why is this only for convenience? How could we determine this value based only on the size of the disk?)
+Writing networked programs is difficult not just because of the need for speed, but also because it is very important to avoid security holes. These are programming mistakes that might allow an attacker to crash the networked program, cause it to misbehave, trick it into doing something it shouldn't, or even gain access to the machine.
 
-Even though your kernel module will not support creating new hard links (unless you do that challenge problem), each inode in OSPFS has a "link count", which is a number indicating how many directory entries refer to it. (The ospfsformat utility knows how to create hard links when it creates the initial OSPFS file system for your module to use.) If there is only one hard link to a file, then the link count will be 1: only one directory entry refers to the inode (the normal case). For each extra link created in a "real" UNIX file system, the link count increases by 1, and for each hard link removed, the link count decreases by 1. Technically speaking, even the file's original name is a hard link -- it is no different than later directory entries created for the inode except that it was created first. If the link count reaches 0, it means that the inode no longer has any hard links, and its storage space (both the blocks that make up the file and the inode itself) can be marked as free and reused. You will need to support this behavior when you delete files from OSPFS.
+Your job is to fix our peer's security holes and make it robust against as many attacks and network problems as you can imagine.
 
-You may find the -i and -l options to the ls program useful. The -i option causes ls to display the inode number of each file. The -l option causes ls to display a "long listing" which includes, among other information, the link count and size of each file. These options can also be combined.
+Here's what the peer should do: its intended specification.
 
-Here's a sample OSPFS file system. It sort of corresponds to the base/ directory we handed out. (Note that the hello.txt data block is also linked to world.txt -- there is a file with two hard links!) The actual file system you observe will be different; your first free block will be around block #106.
+The peer should serve files located in its current directory to requesting peers.
+The peer should not serve files located in any other directory.
+Other peers should not be able to monopolize the peer's resources. For example, another peer should not be able to fill up this peer's disk, or fill up its file descriptor table with non-functioning connections.
+Furthermore, there is at least one buffer overflow bug in the code that could crash your client with a segmentation fault -- or, worse, give an attacker control of your computer! While a buffer overflow bug would not happen in a safe language like Java, other security bugs can happen in any language. It is important for you to understand the need for careful programming in any network environment like this.
 
- An OSPFS file system corresponding to the base/ directory we handed out. 
+Your job is to solve the following problems:
 
-Directories versus regular files
+The peer should not serve files outside the current directory.
+Find and fix any buffer overrun bugs. List conditions that would have triggered the bugs in your answers.txt file.
+Otherwise improve the peer's robustness. Use make run-bad to test your client; our "bad" tracker tries to abuse connecting peers in a variety of interesting ways. (It chooses random attack strategies each time.) You should be able to run make run-bad indefinitely, without eventually running out of disk space or memory or file descriptors. Tell us what robustness problems you fixed in your answers.txt file.
+If you find other problems, feel free to solve them too, and tell us about them for extra credits. Submit a different document named *extra_credit*, other than your .tar.gz file.
 
-An ospfs_inode structure in our file system can represent either a regular file or a directory; these two types of "files" are distinguished by the type field in the ospfs_inode structure. The file system manages regular files and directory-files in exactly the same way, except that it does not interpret the contents of the data blocks associated with regular files at all, whereas the file system interprets the contents of a directory-file as a series of ospfs_direntry structures describing the files and subdirectories within the directory. Each ospfs_direntry structure just contains a filename and an inode number. All other information about the file -- including size, type, and pointers to data blocks -- is stored in the inode.
+In general, you may assume that only peers will attack you; the tracker is trusted. However, there is one bug in our handout code's tracker communication: if many, many peers are logged in at once, then our peer will be unable to download anything, because communications with the tracker will get confused. You should find and fix this bug as well. To test, run your osppeer program against the popular tracker. A message like tracker connection closed prematurely! indicates that you haven't fixed the bug.
 
-OSPFS directory entry structures are fixed length. Every directory entry takes up exactly 128 bytes. The directory entry design is explained in more detail in ospfs.h.
+Task 3: Attack!!!
 
-Inode number 1 in our file system is special: it is the inode for the root directory of the file system. Inode number 0 is reserved and must never be used.
+Your final task is to be the bad guy. Find at least two ways that a malicious peer client could attack the client implemented by the skeleton code (and potentially other students' clients). The attack may cause the client to crash or may simply cause it to fail to respond to legitimate requests or run out of resources (denial of service). Your peer should go into "malicious mode" when the evil_mode global variable is nonzero. It may attack only those peers that actively try to download its files ("uploader attacks"), or, even better, seek out new peers to attack by connecting to them ("downloader attacks")!
 
-Hard Links
+Add these security exploits to your client code. These attacks should only be active when the evil_mode flag is set. Otherwise, your code should behave nicely. Also add a description of your attacks in the answers.txt file. Why are your attacks actually attacks?
 
-Files can take up a lot of space, and you may want the same exact set of data to be stored in multiple directories. Hard links are a simple mechanism that lets you have multiple "files" link to the same inode structure. Suppose the user runs the following commands:
+Extra Credit Task: File Integrity
 
-% echo foo >> foo.txt
-% ln foo.txt gah.txt
-% cat gah.txt
-foo
-% echo blurb >> gah.txt
-% cat foo.txt
-foo
-blurb
-In this code, the user is hard linking gah.txt to the same data that represents foo.txt. So whenever either gah.txt or foo.txt is changed, both files see those changes, automatically. This may sound challenging, but it's actually really simple. The directory entries for gah.txt and foo.txt map to the same inode number. For this, you'll have to just fill out osprd_link, which gets called whenever the user tries to create a hard link in a directory. For simplicity, you do not need worry about or test hard links to symlinks. Only worry about hard links to regular files.
-
-Symbolic links
-
-OSPFS also supports symbolic links. This type of file adds a layer of indirection to the file system: A symbolic link file essentially points at another file. The command "ln -s src.txt dst.txt", will create a symbolic link file dst.txt that points to file src.txt. If an application asks to open dst.txt, the kernel will examine the symbolic link, follow the symbolic link, and return a file descriptor open to src.txt. For example, any changes to src.txt will show up immediately when a program examines dst.txt. In OSPFS, symbolic links' destination files are stored in their inodes themselves. See ospfs.h for more detail.
-
-You are expected to add support for symbolic link creation and deletion to ospfsmod.c. Test it using code like this:
-
-% ln -s hello.txt thelink
-% diff hello.txt thelink && echo Same contents
-Same contents
-% echo "World" >> hello.txt
-% diff hello.txt thelink && echo Same contents
-Same contents
-% rm thelink
-Conditional Symlinks
-
-One nice thing about symlinks is that the actual symlink file can contain anything. This allows the file system to interpret a symlink in unique ways. For instance, suppose you have a networked file system (like the one on the Seasnet machines) that connects to multiple different architectures. In order to use different versions of a binary, you currently need to set different values for the 'PATH' environment variable. It would be much nicer if the a symlink could link to two different paths, and select the right one based on some condition (in this case the cpu architecture). Doing this all the way is rather challenging, so we'll just start with a simple proof of concept; our conditional symlinks will be based on whether or not the current process is running as root.
-
-Here's how they will work:
-
-The following command creates a conditional symlink: "ln -s root?hello.txt:bye.txt test". There are four important parts of this conditional symlink.
-The conditional statement. For this lab, it will always 'root?' which is true if the current process is running as root and false in all other cases.
-The symlink for when the condition is true. In this case it is 'hello.txt'. Whenever root accesses this symlink, it should be redirected to 'hello.txt' automatically.
-The symlink for when the condition is false. In this case it is 'bye.txt'. Whenever any non-root process accesses this symlink, it should be automatically redirected to 'bye.txt'.
-The symlink's name. In this case it is 'test'.
-Handling this properly will require several things: determining the user id of the current running process, knowing when the running process is root, knowing when a conditional symlink is being accessed, and how to interpret a conditional symlink upon access. Some functions useful for this have been added to the Lab functions page.
-
-Here's an example of how this should work:
-
- # cd test
- # echo "Not root" > notroot
- # echo "Root" > root
- # ln -s root?root:notroot amiroot
- # cat amiroot
- Root
- # su user -c "cat amiroot"                        # run command as non-root user
- Not root
-What you have to do
-
-Your assignment will be to implement the routines that handle free block management, changing file sizes, read/write to the file, reading a directory file, deleting symbolic links, creating files, and conditional symlinks.
-
-You will need to implement exercises in the following functions for this lab. One plausible order (with rough grade percentages) is this:
-
-Support for reading files: ospfs_read (15%)
-Support for reading directories: ospfs_dir_readdir (10%)
-Free block bitmap bookkeeping: allocate_block, free_block (15%)
-Support for changing file sizes: change_size (15%)
-Support for writing files: ospfs_write (15%)
-Support for creating files: ospfs_create (10%)
-Support for creating hard links: ospfs_link (5%)
-Support for creating and deleting symbolic links: ospfs_symlink and ospfs_unlink (10%)
-Support for conditional symlinks (5%).
-All of these functions have comments explaining what you must do. Also read the comments in ospfs.h and towards the top of ospfsmod.c to get oriented.
-
-Building the lab
-
-This lab is designed to run within the Qemu emulator, like Lab 2. So just run ./run-qemu and press Enter at the . go prompt.
-
-We have added new support for re-building your lab in the Qemu emulator (so you don't have to reboot Qemu to fix compilation errors and such). To reload your source, first type "r" in your shell window (where you ran ./run-qemu), then type "reload" in the Qemu window. Do note that this process wipes your test directory, replacing it with a fresh version.
-
-This builds an initial OSPFS image using the contents of the base directory. If you want to add files to your OSPFS image, simply add files and directories to base, then rerun Qemu. If make reports an error that the resulting file system is too big, raise the number 512 in the Makefile to something larger. By default, the image created by ospfsformat contains two directory entries which refer to the same file (that is, they are hard links): hello.txt and world.txt. You can add more files like this by adding hard links to the base directory using the ln command. Read its manual page by typing man ln at a shell prompt. (Note: the link counts on directories are always larger than one. Why might this be?) The Makefile also creates a symbolic link from file link to hello.txt.
-
-The Qemu environment then mounts the file system on an existing directory, named test. This hides the directory's existing contents, turning the directory into a "gateway" into the new file system. When your file system is ready, ls base and ls test should return the same results (except for things like ownership, permissions, and inode numbers).
-
-It is worth discussing how the functionality of the script is implemented. The following list shows the commands used:
-
-Installing a module in the kernel: insmod ospfs.ko
-Checking to see if the module is installed: cat /proc/modules or lsmod
-Mounting the filesystem onto the test directory: /bin/mount -t ospfs none test
-Unmounting the filesystem from test: umount test
-Removing a module from the kernel: rmmod ospfs
-Testing
-
-After implementing these functions, you should be able to do the following in your filesystem: read and write to files, change the size of files, append to existing files, read the contents of directories, and create and remove files.
-
-Here are some hints for testing.
-
-We provide a large GIF file to test your handling of large files (with indirect blocks), pokercats.gif. To see whether your reading support works for large files, run zgv test/pokercats.gif at the Qemu prompt. You should see a picture. (Press return to get rid of the picture.) To test writing support for large files, try something like cp test/pokercats.gif test/p.gif; zgv test/p.gif.
-The lab3-tester.pl file, provided with the lab, works similarly to the testers from other labs. You should as usual design some tests yourself.
-We have provided you with a minimal Lab 3 test script, lab3-tester.pl, to help you check a few of the following test cases. You are encouraged to add your own test cases to it as you complete parts of your lab.
-
-Here is a list of the test cases we will run on your code. Feel free to add these to the provided testing script so that it checks these things automatically for you! You will probably find the dd utility very useful to perform many of the tests. You can read its documentation (man dd) for details of how to use it: check out its if=, of=, bs=, seek=, skip=, and conv=notrunc options. Also the truncate utility we included with the skeleton code will help you test some of the cases. (Suggestion: compare the results of performing operations on your OSPFS file system to doing the same operations on the normal Linux file system.)
-
-Directory reading tests: listing files in directories
-ls of the root directory
-ls of the root directory including file types (ls -F)
-ls of subdirectory
-ls of subdirectory using more than one data block
-ls of subdirectory using indirect data blocks
-Reading tests: reading various parts of a file
-read the first byte of a file
-read the first block of a file
-read half of the first block of a file
-read starting partway through the first block and into part of the next
-read more than one block
-try to read past the end of a file
-try to read into an invalid buffer pointer
-Overwrite tests: all these tests overwrite part of a file without changing the rest of the file
-overwrite the first few bytes of a file
-overwrite the first two blocks of a file
-overwrite the second block of a file
-overwrite the middle part of the first block of a file
-overwrite the second half of the first block of a file
-overwrite the second half of the first block and the first half of the second block of a file
-try to write from an invalid buffer pointer
-Truncation tests: truncating files to various lengths
-truncate a single data block file to 0 length
-truncate a file with only direct data blocks to 0 length
-truncate a file with indirect data blocks to 0 length
-truncate a single data block file to nonzero but smaller length
-truncate a file with only direct data blocks to a smaller length that uses the same number of data blocks
-truncate a file with only direct data blocks to a smaller length which uses fewer data blocks
-truncate a file with indirect data blocks to a smaller length that still uses indirect data blocks
-truncate a file with indirect data blocks to a smaller length which only uses direct data blocks
-Appending tests: adding data to the end of a file (not necessarily using O_APPEND)
-append data to a file with a single data block without requiring a new block to be allocated
-append more than one data block of data to a file
-append several data blocks to a file that already has indirect data blocks
-append data to a file with no indirect data blocks so that the appended data uses indirect data blocks
-try to append data to a file so that there would be more than the maximum allowed data blocks
-Block management tests: checking to make sure the block bitmap is managed correctly
-try to allocate a block when there are no free blocks
-free a block and check that that block can be reallocated
-try to allocate 3 blocks when only 2 are free
-truncate a file so that it no longer has any indirect data blocks and ensure that the indirect pointer block is freed
-Deletion tests: checking that deleting files works correctly
-delete a file from a directory
-delete a file with more than one hard link from a directory
-delete all hard links to an inode
-Symbolic links: checking that symbolic links work correctly
-create a symbolic link
-DELETE A SYMBOLIC LINK (you will need to check that this works!)
+Many of the evil peers' attacks are pretty easy to detect, but some are not so easy. In particular, how can your peer detect that an evil peer has sent a corrupted version of the file?
+
+The OSP2P system actually already supports a strategy for detecting corruption, called cryptographic hash functions or checksums. When our clients connect to the tracker, they not only register interest in the file, they also tell the tracker the MD5 checksum of the file's data (calculated with md5_init, md5_append, and md5_finish_text(...,1); these functions are defined in md5.h). Another peer can compare this checksum with the checksum of the file they download.
+
+Your job in this extra credit task is to detect corruption (intentional or not) using the trackers' checksum support. We aren't saying much more about how to do this; poke around on the tracker using telnet to figure out how checksum support works.
